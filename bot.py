@@ -252,7 +252,7 @@ def _format_distribution(rows, total, labels_map):
         pct = round(count / total * 100)
         label = labels_map.get(key, key)
         bar = "█" * max(1, pct // 10) if count > 0 else ""
-        lines.append(f"{label}: {count} ({pct}%) {bar}")
+        lines.append(f"{label}: {count} ({pct}%)")
     return "\n".join(lines) if lines else "Нет данных."
 
 def get_company_stats_text(company_code: str) -> str:
