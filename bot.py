@@ -30,11 +30,7 @@ SURVEY_DAYS = ["monday", "wednesday", "friday"]
 SURVEY_HOUR = 10
 SURVEY_MINUTE = 0
 
-# СОСТОЯНИЯ ДИАЛОГА
-
 WAITING_CODE = 0
-
-# ВОПРОСЫ
 
 QUESTIONS = {
     "q1": {
@@ -61,7 +57,25 @@ QUESTIONS = {
     }
 }
 
-# ЛОГИРОВАНИЕ
+Q1_LABELS = {
+    "resurs": "🔥 В ресурсе",
+    "normalno": "😐 Нормально",
+    "ustal": "🌧 Устал(а)",
+    "predel": "💤 На пределе"
+}
+
+Q2_LABELS = {
+    "legkaya": "Лёгкая",
+    "normalnaya": "Нормальная",
+    "vysokaya": "Высокая",
+    "ne_spravlyayus": "Не справляюсь"
+}
+
+Q3_LABELS = {
+    "net": "Нет",
+    "mysl": "Промелькнула мысль",
+    "da_serezno": "Да, серьёзно"
+}
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -69,7 +83,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# БАЗА ДАННЫХ SQLITE
+# БАЗА
 
 def init_db():
     os.makedirs("/app/data", exist_ok=True)
@@ -119,9 +133,9 @@ def init_db():
 
 def get_all_companies() -> list:
     conn = sqlite3.connect(DB_PATH)
-    codes = [row[0] for row in conn.execute("SELECT code FROM companies")]
+    rows = conn.execute("SELECT code FROM companies ORDER BY code").fetchall()
     conn.close()
-    return codes
+    return [row[0] for row in rows]
 
 def get_all_participants() -> list:
     conn = sqlite3.connect(DB_PATH)
@@ -131,13 +145,9 @@ def get_all_participants() -> list:
     conn.close()
     return rows
 
-# АНОНИМИЗАЦИЯ
-
 def anonymize(telegram_id: int) -> str:
     raw = str(telegram_id).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:16]
-
-# ПРОВЕРКИ И РЕГИСТРАЦИЯ
 
 def is_valid_code(code: str) -> bool:
     return code.upper() in get_all_companies()
@@ -177,7 +187,7 @@ def save_answer(telegram_id: int, company: str, q1: str, q2: str, q3: str):
     conn.close()
     logger.info(f"Ответ сохранён: {company}")
 
-# ЭКСПОРТ CSV
+# CSV оставляем, но можно не использовать
 
 def export_to_csv(company_code: str = None) -> str:
     filename = f"/app/data/somaspace_answers_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -231,7 +241,86 @@ def daily_backup():
     csv_file = export_to_csv()
     upload_to_yandex_disk(csv_file)
 
-# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# СТАТИСТИКА
+
+def _format_distribution(rows, total, labels_map):
+    if total == 0:
+        return "Нет данных."
+
+    lines = []
+    for key, count in rows:
+        pct = round(count / total * 100)
+        label = labels_map.get(key, key)
+        bar = "█" * max(1, pct // 10) if count > 0 else ""
+        lines.append(f"{label}: {count} ({pct}%) {bar}")
+    return "\n".join(lines) if lines else "Нет данных."
+
+def get_company_stats_text(company_code: str) -> str:
+    code = company_code.upper()
+
+    conn = sqlite3.connect(DB_PATH)
+
+    company = conn.execute(
+        "SELECT name FROM companies WHERE code = ?",
+        (code,)
+    ).fetchone()
+
+    total = conn.execute(
+        "SELECT COUNT(*) FROM answers WHERE company_code = ?",
+        (code,)
+    ).fetchone()[0]
+
+    unique_people = conn.execute(
+        "SELECT COUNT(DISTINCT anon_id) FROM answers WHERE company_code = ?",
+        (code,)
+    ).fetchone()[0]
+
+    q1_rows = conn.execute("""
+        SELECT q1_state, COUNT(*)
+        FROM answers
+        WHERE company_code = ?
+        GROUP BY q1_state
+        ORDER BY COUNT(*) DESC
+    """, (code,)).fetchall()
+
+    q2_rows = conn.execute("""
+        SELECT q2_load, COUNT(*)
+        FROM answers
+        WHERE company_code = ?
+        GROUP BY q2_load
+        ORDER BY COUNT(*) DESC
+    """, (code,)).fetchall()
+
+    q3_rows = conn.execute("""
+        SELECT q3_leave, COUNT(*)
+        FROM answers
+        WHERE company_code = ?
+        GROUP BY q3_leave
+        ORDER BY COUNT(*) DESC
+    """, (code,)).fetchall()
+
+    conn.close()
+
+    company_name = company[0] if company else "Неизвестная компания"
+
+    if total == 0:
+        return (
+            f"📊 *Статистика по {code}*\n"
+            f"{company_name}\n\n"
+            "Пока нет ответов по этой компании."
+        )
+
+    text = (
+        f"📊 *Статистика по {code}*\n"
+        f"{company_name}\n\n"
+        f"Всего ответов: *{total}*\n"
+        f"Уникальных людей: *{unique_people}*\n\n"
+        f"*Состояние*\n{_format_distribution(q1_rows, total, Q1_LABELS)}\n\n"
+        f"*Нагрузка*\n{_format_distribution(q2_rows, total, Q2_LABELS)}\n\n"
+        f"*Мысли об уходе*\n{_format_distribution(q3_rows, total, Q3_LABELS)}"
+    )
+
+    return text
 
 def make_keyboard(buttons_config: list) -> InlineKeyboardMarkup:
     keyboard = [
@@ -243,7 +332,7 @@ def make_keyboard(buttons_config: list) -> InlineKeyboardMarkup:
 def is_admin(user_id: int) -> bool:
     return ADMIN_TELEGRAM_ID is not None and str(user_id) == str(ADMIN_TELEGRAM_ID)
 
-# ОБРАБОТЧИКИ TELEGRAM
+# ОБРАБОТЧИКИ
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
@@ -295,7 +384,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/stop — отписаться\n"
         "/help — эта справка\n"
         "/myid — показать твой Telegram ID\n"
-        "/export — выгрузить CSV (только для администратора)",
+        "/stats TEST — статистика по компании\n"
+        "/export TEST — выгрузить CSV (только для администратора)",
         parse_mode="Markdown"
     )
 
@@ -310,6 +400,29 @@ async def myid_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Твой Telegram ID: `{update.effective_user.id}`",
         parse_mode="Markdown"
     )
+
+async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    if not is_admin(user_id):
+        await update.message.reply_text("У тебя нет доступа к статистике.")
+        return
+
+    if not context.args:
+        await update.message.reply_text(
+            "Напиши код компании так:\n`/stats TEST`",
+            parse_mode="Markdown"
+        )
+        return
+
+    company_code = context.args[0].strip().upper()
+
+    if not is_valid_code(company_code):
+        await update.message.reply_text("Такой код компании не найден.")
+        return
+
+    text = get_company_stats_text(company_code)
+    await update.message.reply_text(text, parse_mode="Markdown")
 
 async def export_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -450,6 +563,7 @@ def main():
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("stop", stop_cmd))
     app.add_handler(CommandHandler("myid", myid_cmd))
+    app.add_handler(CommandHandler("stats", stats_cmd))
     app.add_handler(CommandHandler("export", export_cmd))
     app.add_handler(CallbackQueryHandler(handle_button))
 
