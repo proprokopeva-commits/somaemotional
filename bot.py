@@ -22,7 +22,7 @@ from telegram.ext import (
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 YANDEX_TOKEN = os.getenv("YANDEX_TOKEN")
 YANDEX_FOLDER = "/SomaSpace"
-DB_PATH = "somaspace.db"
+DB_PATH = "/app/data/somaspace.db"
 
 SURVEY_DAYS = ["monday", "wednesday", "friday"]
 SURVEY_HOUR = 10
@@ -67,9 +67,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# БАЗА ДАННЫХ SQLite
+# БАЗА ДАННЫХ SQLITE
 
 def init_db():
+    os.makedirs("/app/data", exist_ok=True)
+
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
@@ -173,10 +175,10 @@ def save_answer(telegram_id: int, company: str, q1: str, q2: str, q3: str):
     conn.close()
     logger.info(f"Ответ сохранён: {company}")
 
-# ЯНДЕКС.ДИСК
+# ЭКСПОРТ CSV
 
 def export_to_csv(company_code: str = None) -> str:
-    filename = f"somaspace_answers_{datetime.now().strftime('%Y%m%d')}.csv"
+    filename = f"/app/data/somaspace_answers_{datetime.now().strftime('%Y%m%d')}.csv"
 
     conn = sqlite3.connect(DB_PATH)
     if company_code:
@@ -242,10 +244,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
         "Привет 👋\n\n"
         "Я бот SõmaSpace — помогаю командам следить за своим состоянием.\n\n"
-        "Три раза в неделю буду присылать 3 коротких вопроса. "
-        "Меньше минуты.\n\n"
-        "🔒 *Твои ответы анонимны.* Руководитель видит только "
-        "общую картину команды — никаких личных данных.\n\n"
+        "Три раза в неделю буду присылать 3 коротких вопроса. Меньше минуты.\n\n"
+        "🔒 *Твои ответы анонимны.* Руководитель видит только общую картину команды — никаких личных данных.\n\n"
         "Введи *код своей компании* — его дал тебе HR:",
         parse_mode="Markdown"
     )
@@ -263,14 +263,12 @@ async def receive_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
     register_user(user_id, code)
     context.user_data["company_code"] = code
+    context.user_data["survey_state"] = "q1"
 
     await update.message.reply_text(
         "✅ Отлично, ты зарегистрирован!\n\n"
-        "Давай начнём небольшой опрос 👇",
-        parse_mode="Markdown"
+        "Давай начнём небольшой опрос 👇"
     )
-
-    context.user_data["survey_state"] = "q1"
 
     await update.message.reply_text(
         QUESTIONS["q1"]["text"],
@@ -280,28 +278,13 @@ async def receive_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
     return ConversationHandler.END
 
-    await update.message.reply_text(
-        await update.message.reply_text(
-    "✅ Отлично, ты зарегистрирован!\n\n"
-    "Давай начнём небольшой опрос 👇",
-    parse_mode="Markdown"
-)
-
-# сразу запускаем опрос
-context.user_data["survey_state"] = "q1"
-
-await update.message.reply_text(
-    QUESTIONS["q1"]["text"],
-    reply_markup=make_keyboard(QUESTIONS["q1"]["buttons"]),
-    parse_mode="Markdown"
-)
-    return ConversationHandler.END
-
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 *SõmaSpace Pulse Bot*\n\n"
-        "Присылаю 3 вопроса три раза в неделю.\n"
-        "Ответы анонимны — никто не знает кто ты.\n\n"
+        "Проверка бота:\n"
+        "1. Нажми /start\n"
+        "2. Введи код `TEST`\n"
+        "3. Пройди 3 вопроса\n\n"
         "/start — регистрация\n"
         "/stop — отписаться\n"
         "/help — эта справка",
@@ -355,7 +338,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text("Спасибо, записала! 🙏\nДо следующего раза.")
 
-# РАССЫЛКА ОПРОСОВ
+# РАССЫЛКА
 
 async def send_survey(application: Application):
     logger.info("Начинаем рассылку...")
@@ -364,18 +347,18 @@ async def send_survey(application: Application):
 
     for telegram_id, company_code in participants:
         try:
+            if telegram_id not in application.user_data:
+                application.user_data[telegram_id] = {}
+
+            application.user_data[telegram_id]["survey_state"] = "q1"
+            application.user_data[telegram_id]["company_code"] = company_code
+
             await application.bot.send_message(
                 chat_id=telegram_id,
                 text="Привет 👋 Время короткого опроса!\n\n" + QUESTIONS["q1"]["text"],
                 reply_markup=make_keyboard(QUESTIONS["q1"]["buttons"]),
                 parse_mode="Markdown"
             )
-
-            if telegram_id not in application.user_data:
-                application.user_data[telegram_id] = {}
-
-            application.user_data[telegram_id]["survey_state"] = "q1"
-            application.user_data[telegram_id]["company_code"] = company_code
             sent += 1
 
         except Exception as e:
