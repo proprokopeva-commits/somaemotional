@@ -21,6 +21,8 @@ from telegram.ext import (
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 YANDEX_TOKEN = os.getenv("YANDEX_TOKEN")
+ADMIN_TELEGRAM_ID = os.getenv("ADMIN_TELEGRAM_ID")
+
 YANDEX_FOLDER = "/SomaSpace"
 DB_PATH = "/app/data/somaspace.db"
 
@@ -178,19 +180,19 @@ def save_answer(telegram_id: int, company: str, q1: str, q2: str, q3: str):
 # ЭКСПОРТ CSV
 
 def export_to_csv(company_code: str = None) -> str:
-    filename = f"/app/data/somaspace_answers_{datetime.now().strftime('%Y%m%d')}.csv"
+    filename = f"/app/data/somaspace_answers_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 
     conn = sqlite3.connect(DB_PATH)
     if company_code:
         rows = conn.execute(
             "SELECT date, time, company_code, anon_id, q1_state, q2_load, q3_leave, weekday "
-            "FROM answers WHERE company_code = ? ORDER BY date DESC",
+            "FROM answers WHERE company_code = ? ORDER BY date DESC, time DESC",
             (company_code.upper(),)
         ).fetchall()
     else:
         rows = conn.execute(
             "SELECT date, time, company_code, anon_id, q1_state, q2_load, q3_leave, weekday "
-            "FROM answers ORDER BY date DESC"
+            "FROM answers ORDER BY date DESC, time DESC"
         ).fetchall()
     conn.close()
 
@@ -237,6 +239,9 @@ def make_keyboard(buttons_config: list) -> InlineKeyboardMarkup:
         for row in buttons_config
     ]
     return InlineKeyboardMarkup(keyboard)
+
+def is_admin(user_id: int) -> bool:
+    return ADMIN_TELEGRAM_ID is not None and str(user_id) == str(ADMIN_TELEGRAM_ID)
 
 # ОБРАБОТЧИКИ TELEGRAM
 
@@ -285,9 +290,12 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "1. Нажми /start\n"
         "2. Введи код `TEST`\n"
         "3. Пройди 3 вопроса\n\n"
+        "Команды:\n"
         "/start — регистрация\n"
         "/stop — отписаться\n"
-        "/help — эта справка",
+        "/help — эта справка\n"
+        "/myid — показать твой Telegram ID\n"
+        "/export — выгрузить CSV (только для администратора)",
         parse_mode="Markdown"
     )
 
@@ -296,6 +304,41 @@ async def stop_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Хорошо, больше не буду беспокоить.\n"
         "Если захочешь вернуться — /start"
     )
+
+async def myid_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        f"Твой Telegram ID: `{update.effective_user.id}`",
+        parse_mode="Markdown"
+    )
+
+async def export_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    if not is_admin(user_id):
+        await update.message.reply_text("У тебя нет доступа к экспорту.")
+        return
+
+    company_code = None
+    if context.args:
+        company_code = context.args[0].strip().upper()
+
+    try:
+        filename = export_to_csv(company_code)
+
+        caption = "Вот экспорт ответов в CSV."
+        if company_code:
+            caption = f"Вот экспорт ответов по компании {company_code}."
+
+        with open(filename, "rb") as f:
+            await update.message.reply_document(
+                document=f,
+                filename=os.path.basename(filename),
+                caption=caption
+            )
+
+    except Exception as e:
+        logger.error(f"Ошибка отправки CSV: {e}")
+        await update.message.reply_text("Не получилось отправить CSV-файл.")
 
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -406,6 +449,8 @@ def main():
     app.add_handler(reg)
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("stop", stop_cmd))
+    app.add_handler(CommandHandler("myid", myid_cmd))
+    app.add_handler(CommandHandler("export", export_cmd))
     app.add_handler(CallbackQueryHandler(handle_button))
 
     threading.Thread(target=run_scheduler, args=(app,), daemon=True).start()
