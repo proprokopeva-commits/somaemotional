@@ -265,6 +265,22 @@ async def receive_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     context.user_data["company_code"] = code
 
     await update.message.reply_text(
+        "✅ Отлично, ты зарегистрирован!\n\n"
+        "Давай начнём небольшой опрос 👇",
+        parse_mode="Markdown"
+    )
+
+    context.user_data["survey_state"] = "q1"
+
+    await update.message.reply_text(
+        QUESTIONS["q1"]["text"],
+        reply_markup=make_keyboard(QUESTIONS["q1"]["buttons"]),
+        parse_mode="Markdown"
+    )
+
+    return ConversationHandler.END
+
+    await update.message.reply_text(
         await update.message.reply_text(
     "✅ Отлично, ты зарегистрирован!\n\n"
     "Давай начнём небольшой опрос 👇",
