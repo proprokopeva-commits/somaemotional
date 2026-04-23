@@ -1,0 +1,251 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "project": "SõmaSpace Pulse Bot",
+    "description": "Конфигурация вопросов для пульс-опросов. Структура: ядро + ротация по неделям месяца.",
+    "schedule": {
+      "tuesday":  { "time": "11:00", "questions_count": 3 },
+      "thursday": { "time": "15:30", "questions_count": 4 }
+    },
+    "response_format": "buttons_only",
+    "updated": "2026-04-22"
+  },
+
+  "greetings": {
+    "tuesday_morning": [
+      "Привет 👋 Это короткий вторничный пульс.\nТри вопроса — меньше минуты.",
+      "Доброе утро 🌿 Пара минут на пульс?\nТри коротких вопроса.",
+      "Привет! Вторник — хороший день чтобы сверить состояние.\n3 вопроса, и я не задерживаю."
+    ],
+    "thursday_afternoon": [
+      "Привет 👋 Четверг, неделя почти прошла.\nЧетыре коротких вопроса — расскажешь как ты?",
+      "Привет! Проверим как идёт неделя.\n4 вопроса, меньше минуты.",
+      "Привет 🌿 Время для четвергового пульса.\nЧетыре вопроса — и ты свободен(а)."
+    ]
+  },
+
+  "closings": {
+    "after_survey": [
+      "Спасибо, записала 🙏\nДо следующего раза.",
+      "Спасибо что ответил(а). Это важно 🌱",
+      "Записала. Хороших тебе оставшихся дней недели 🙌",
+      "Спасибо 🤍 Твой голос услышан."
+    ]
+  },
+
+  "core_questions": {
+    "_comment": "Эти три вопроса задаются каждый опрос — и во вторник, и в четверг. Это основа трендов.",
+
+    "mood": {
+      "id": "mood",
+      "text": "*Вопрос 1 из {total}*\n\nКак ты сегодня?",
+      "category": "Настроение",
+      "buttons": [
+        { "text": "🔥 В ресурсе",     "value": "resource",   "score": 5 },
+        { "text": "🙂 Нормально",      "value": "normal",     "score": 4 },
+        { "text": "😐 Так себе",       "value": "so_so",      "score": 3 },
+        { "text": "🌧 Устал(а)",       "value": "tired",      "score": 2 },
+        { "text": "💤 На пределе",     "value": "exhausted",  "score": 1 }
+      ]
+    },
+
+    "workload": {
+      "id": "workload",
+      "text": "*Вопрос 2 из {total}*\n\nКак тебе сейчас по нагрузке?",
+      "category": "Нагрузка",
+      "buttons": [
+        { "text": "🌿 Легко, есть запас",         "value": "light",        "score": 5 },
+        { "text": "⚖️ Нормальный ритм",            "value": "balanced",     "score": 4 },
+        { "text": "🏃 Интенсивно, но тяну",        "value": "intense",      "score": 3 },
+        { "text": "🔥 Высокая, уже на пределе",   "value": "overload",     "score": 2 },
+        { "text": "🆘 Не справляюсь",              "value": "cant_cope",    "score": 1 }
+      ]
+    },
+
+    "leave_marker": {
+      "id": "leave_marker",
+      "text": "*Вопрос 3 из {total}*\n\nНа этой неделе было ощущение «хочу всё бросить»?",
+      "category": "Риск ухода",
+      "buttons": [
+        { "text": "😌 Нет, всё ок",                 "value": "no",          "score": 5 },
+        { "text": "🤔 Мелькнуло один раз",          "value": "once",        "score": 3 },
+        { "text": "😔 Да, было несколько раз",      "value": "few_times",   "score": 2 },
+        { "text": "🚪 Почти постоянно",              "value": "constant",    "score": 1 }
+      ]
+    }
+  },
+
+  "rotation_questions": {
+    "_comment": "Эти вопросы задаются только в четверг. Один вопрос на неделю — ротация по 4 темам.",
+
+    "team_relations": {
+      "id": "team_relations",
+      "text": "*Вопрос 4 из 4*\n\nКак ты чувствуешь себя среди коллег сейчас?",
+      "category": "Отношения в команде",
+      "buttons": [
+        { "text": "🤝 Как своя среди своих",         "value": "belonging",    "score": 5 },
+        { "text": "🙂 Нормально, рабочие отношения", "value": "professional", "score": 4 },
+        { "text": "😐 Я будто отдельно",             "value": "isolated",     "score": 2 },
+        { "text": "🧊 Ощущаю холод или напряжение",  "value": "tension",      "score": 1 }
+      ]
+    },
+
+    "manager_relations": {
+      "id": "manager_relations",
+      "text": "*Вопрос 4 из 4*\n\nЧувствуешь ли поддержку от своего руководителя на этой неделе?",
+      "category": "Отношения с руководством",
+      "buttons": [
+        { "text": "💪 Есть на кого опереться",      "value": "supported",    "score": 5 },
+        { "text": "🙂 В целом нормально",           "value": "okay",         "score": 4 },
+        { "text": "😐 Не особо, но без конфликта",  "value": "neutral",      "score": 2 },
+        { "text": "🥶 Чувствую дистанцию/давление", "value": "pressure",     "score": 1 }
+      ]
+    },
+
+    "meaning": {
+      "id": "meaning",
+      "text": "*Вопрос 4 из 4*\n\nБыло ли на этой неделе ощущение «это стоило того»?",
+      "category": "Смысл работы",
+      "buttons": [
+        { "text": "✨ Да, работа наполняет",         "value": "fulfilled",    "score": 5 },
+        { "text": "🙂 Иногда было",                  "value": "sometimes",    "score": 4 },
+        { "text": "😐 Делал(а) потому что надо",    "value": "obligation",   "score": 2 },
+        { "text": "🪫 Не чувствовал(а) смысла",     "value": "empty",        "score": 1 }
+      ]
+    },
+
+    "safety": {
+      "id": "safety",
+      "text": "*Вопрос 4 из 4*\n\nЕсли бы тебе сейчас было трудно — есть ли в компании кто-то, к кому ты мог(ла) бы обратиться?",
+      "category": "Поддержка и безопасность",
+      "buttons": [
+        { "text": "🫂 Да, точно знаю к кому",        "value": "have_support", "score": 5 },
+        { "text": "🤔 Наверное есть",                "value": "maybe",        "score": 3 },
+        { "text": "😐 Не уверен(а)",                  "value": "unsure",       "score": 2 },
+        { "text": "🚫 Нет, таких людей нет",         "value": "alone",        "score": 1 }
+      ]
+    }
+  },
+
+  "monthly_deep_question": {
+    "_comment": "Задаётся один раз в конце месяца — в четверг 4-й недели. После всех остальных вопросов.",
+
+    "id": "monthly_change",
+    "text": "*Последний вопрос месяца*\n\nЕсли бы ты мог(ла) поменять одну вещь в работе — что бы это было?",
+    "category": "Приоритет изменений",
+    "buttons": [
+      { "text": "⏰ Нагрузку",                        "value": "workload_change" },
+      { "text": "👥 Отношения в команде",             "value": "team_change" },
+      { "text": "👤 Отношения с руководством",        "value": "manager_change" },
+      { "text": "💰 Зарплату или условия",            "value": "compensation_change" },
+      { "text": "🎯 Смысл и интересность задач",      "value": "meaning_change" },
+      { "text": "🏠 Баланс работы и жизни",           "value": "balance_change" },
+      { "text": "✅ Ничего, всё устраивает",           "value": "nothing_change" }
+    ]
+  },
+
+  "schedule_by_week": {
+    "_comment": "Какие вопросы задаются на какой неделе месяца. Номер недели определяется по дате (неделя 1-4 текущего месяца).",
+
+    "week_1": {
+      "tuesday":  { "questions": ["mood", "workload", "leave_marker"] },
+      "thursday": { "questions": ["mood", "workload", "leave_marker", "team_relations"] }
+    },
+    "week_2": {
+      "tuesday":  { "questions": ["mood", "workload", "leave_marker"] },
+      "thursday": { "questions": ["mood", "workload", "leave_marker", "manager_relations"] }
+    },
+    "week_3": {
+      "tuesday":  { "questions": ["mood", "workload", "leave_marker"] },
+      "thursday": { "questions": ["mood", "workload", "leave_marker", "meaning"] }
+    },
+    "week_4": {
+      "tuesday":  { "questions": ["mood", "workload", "leave_marker"] },
+      "thursday": {
+        "questions": ["mood", "workload", "leave_marker", "safety"],
+        "add_monthly_deep": true
+      }
+    }
+  },
+
+  "alerts": {
+    "_comment": "Пороги для автоматических оповещений. Когда показатели по компании достигают тревожных значений — SõmaSpace получает уведомление и связывается с клиентом.",
+
+    "critical_workload": {
+      "description": "25% и больше людей на уровне 'не справляюсь' или 'на пределе'",
+      "questions": ["workload"],
+      "threshold_scores": [1, 2],
+      "threshold_percent": 25
+    },
+    "leave_risk": {
+      "description": "15% и больше людей с ответами 'несколько раз' или 'постоянно'",
+      "questions": ["leave_marker"],
+      "threshold_scores": [1, 2],
+      "threshold_percent": 15
+    },
+    "manager_tension": {
+      "description": "20% и больше чувствуют давление или дистанцию от руководства",
+      "questions": ["manager_relations"],
+      "threshold_scores": [1, 2],
+      "threshold_percent": 20
+    },
+    "isolation": {
+      "description": "25% и больше не видят к кому обратиться за поддержкой",
+      "questions": ["safety"],
+      "threshold_scores": [1, 2],
+      "threshold_percent": 25
+    }
+  },
+
+  "report_template": {
+    "_comment": "Структура месячного отчёта для собственника. Все данные агрегированные, без имён.",
+
+    "sections": [
+      {
+        "title": "Эмоциональный пульс за месяц",
+        "metrics": [
+          "Средняя оценка настроения по шкале 1-5",
+          "% людей в зелёной зоне (4-5)",
+          "% в жёлтой зоне (3)",
+          "% в красной зоне (1-2)",
+          "Динамика по неделям (график)"
+        ]
+      },
+      {
+        "title": "Нагрузка команды",
+        "metrics": [
+          "% людей на пределе или не справляющихся",
+          "Дни недели с пиком нагрузки",
+          "Сравнение вторник vs четверг (накопление усталости)"
+        ]
+      },
+      {
+        "title": "Риск ухода",
+        "metrics": [
+          "% людей с тревожными маркерами",
+          "Динамика за месяц",
+          "Корреляция с нагрузкой"
+        ]
+      },
+      {
+        "title": "Срезы по темам",
+        "metrics": [
+          "Неделя 1: отношения в команде",
+          "Неделя 2: отношения с руководством",
+          "Неделя 3: смысл работы",
+          "Неделя 4: поддержка и безопасность"
+        ]
+      },
+      {
+        "title": "Топ-3 приоритета изменений",
+        "source": "monthly_deep_question",
+        "format": "ранжированный список с процентами"
+      },
+      {
+        "title": "Рекомендации SõmaSpace",
+        "type": "expert_commentary",
+        "description": "На основе данных — какие форматы Программы подойдут этой команде"
+      }
+    ]
+  }
+}
