@@ -507,10 +507,25 @@ async def send_question(bot, chat_id: int, question_id: str, current_num: int, t
 
     text = question["text"].replace("{total}", str(total_num))
 
-    keyboard = [
-        [InlineKeyboardButton(btn["text"], callback_data=f"{question_id}:{btn['value']}")]
-        for btn in question["buttons"]
-    ]
+    keyboard = []
+row = []
+
+for i, btn in enumerate(question["buttons"], start=1):
+    row.append(
+        InlineKeyboardButton(
+            btn["text"],
+            callback_data=f"{question_id}:{btn['value']}"
+        )
+    )
+
+    # каждые 2 кнопки — новая строка
+    if i % 2 == 0:
+        keyboard.append(row)
+        row = []
+
+# если осталось нечётное количество
+if row:
+    keyboard.append(row)
 
     await bot.send_message(
         chat_id=chat_id,
