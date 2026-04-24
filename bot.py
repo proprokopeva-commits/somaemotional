@@ -9,7 +9,7 @@ import sqlite3
 import threading
 import time
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -436,73 +436,121 @@ def format_distribution(question_id: str, rows: list[tuple[str, int]], total: in
     return "\n".join(lines)
 
 
-def get_company_stats_text(company_code: str) -> str:
+def get_company_stats_text(company_code: str, date_from: str | None = None, date_to: str | None = None) -> str:
     code = company_code.upper()
     company_name = get_company_name(code) or "Неизвестная компания"
 
+    where = "WHERE company_code = ?"
+    params = [code]
+
+    if date_from:
+        where += " AND date >= ?"
+        params.append(date_from)
+
+    if date_to:
+        where += " AND date <= ?"
+        params.append(date_to)
+
     conn = get_conn()
 
-    total_answers = conn.execute("""
-        SELECT COUNT(*) FROM survey_answers WHERE company_code = ?
-    """, (code,)).fetchone()[0]
+    total_answers = conn.execute(f"""
+        SELECT COUNT(*) FROM survey_answers
+        {where}
+    """, params).fetchone()[0]
 
-    unique_people = conn.execute("""
-        SELECT COUNT(DISTINCT anon_id) FROM survey_answers WHERE company_code = ?
-    """, (code,)).fetchone()[0]
+    unique_people = conn.execute(f"""
+        SELECT COUNT(DISTINCT anon_id) FROM survey_answers
+        {where}
+    """, params).fetchone()[0]
 
-    distinct_questions = conn.execute("""
+    distinct_questions = conn.execute(f"""
         SELECT DISTINCT question_id
         FROM survey_answers
-        WHERE company_code = ?
+        {where}
         ORDER BY question_id
-    """, (code,)).fetchall()
-
-    conn.close()
+    """, params).fetchall()
 
     if total_answers == 0:
+        conn.close()
+        period = make_period_title(date_from, date_to)
         return (
             f"📊 *Статистика по {code}*\n"
-            f"{company_name}\n\n"
-            "Пока нет ответов по этой компании."
+            f"{company_name}\n"
+            f"{period}\n\n"
+            "Пока нет ответов за этот период."
         )
 
     parts = [
         f"📊 *Статистика по {code}*",
         company_name,
+        make_period_title(date_from, date_to),
         "",
-        f"Всего ответов: *{total_answers}*",
+        f"Ответов на вопросы: *{total_answers}*",
         f"Уникальных людей: *{unique_people}*",
-        "",
+        ""
     ]
-
-    conn = get_conn()
 
     for (question_id,) in distinct_questions:
         question = get_question(question_id)
         if not question:
             continue
 
-        question_total = conn.execute("""
+        question_where = where + " AND question_id = ?"
+        question_params = params + [question_id]
+
+        question_total = conn.execute(f"""
             SELECT COUNT(*)
             FROM survey_answers
-            WHERE company_code = ? AND question_id = ?
-        """, (code, question_id)).fetchone()[0]
+            {question_where}
+        """, question_params).fetchone()[0]
 
-        rows = conn.execute("""
+        avg_score = conn.execute(f"""
+            SELECT AVG(score)
+            FROM survey_answers
+            {question_where}
+            AND score IS NOT NULL
+        """, question_params).fetchone()[0]
+
+        red_zone = conn.execute(f"""
+            SELECT COUNT(*)
+            FROM survey_answers
+            {question_where}
+            AND score IN (1, 2)
+        """, question_params).fetchone()[0]
+
+        rows = conn.execute(f"""
             SELECT value, COUNT(*)
             FROM survey_answers
-            WHERE company_code = ? AND question_id = ?
+            {question_where}
             GROUP BY value
             ORDER BY COUNT(*) DESC
-        """, (code, question_id)).fetchall()
+        """, question_params).fetchall()
+
+        red_pct = round(red_zone / question_total * 100) if question_total else 0
 
         parts.append(f"*{question.get('category', question_id)}*")
+
+        if avg_score is not None:
+            parts.append(f"Средний балл: {round(avg_score, 2)} / 5")
+            parts.append(f"Красная зона: {red_pct}%")
+
         parts.append(format_distribution(question_id, rows, question_total))
         parts.append("")
 
     conn.close()
     return "\n".join(parts).strip()
 
+
+def make_period_title(date_from: str | None, date_to: str | None) -> str:
+    if date_from and date_to:
+        if date_from == date_to:
+            return f"Период: {date_from}"
+        return f"Период: {date_from} — {date_to}"
+
+    if date_from and not date_to:
+        return f"Период: с {date_from}"
+
+    return "Период: всё время"
 
 def build_keyboard_for_question(question_id: str) -> InlineKeyboardMarkup:
     question = get_question(question_id)
@@ -771,9 +819,81 @@ async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Такой код компании не найден.")
         return
 
-    text = get_company_stats_text(company_code)
+    date_to = datetime.now().strftime("%Y-%m-%d")
+    date_from = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    text = get_company_stats_text(company_code, date_from, date_to)
     await update.message.reply_text(text, parse_mode="Markdown")
 
+
+async def stats_day_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("У тебя нет доступа к статистике.")
+        return
+
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "Напиши так:\n`/stats_day TEST 2026-04-24`",
+            parse_mode="Markdown"
+        )
+        return
+
+    company_code = context.args[0].strip().upper()
+    day = context.args[1].strip()
+
+    if not is_valid_code(company_code):
+        await update.message.reply_text("Такой код компании не найден.")
+        return
+
+    text = get_company_stats_text(company_code, day, day)
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+async def stats_week_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("У тебя нет доступа к статистике.")
+        return
+
+    if not context.args:
+        await update.message.reply_text(
+            "Напиши код компании так:\n`/stats_week TEST`",
+            parse_mode="Markdown"
+        )
+        return
+
+    company_code = context.args[0].strip().upper()
+
+    if not is_valid_code(company_code):
+        await update.message.reply_text("Такой код компании не найден.")
+        return
+
+    date_to = datetime.now().strftime("%Y-%m-%d")
+    date_from = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    text = get_company_stats_text(company_code, date_from, date_to)
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+async def stats_all_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("У тебя нет доступа к статистике.")
+        return
+
+    if not context.args:
+        await update.message.reply_text(
+            "Напиши код компании так:\n`/stats_all TEST`",
+            parse_mode="Markdown"
+        )
+        return
+
+    company_code = context.args[0].strip().upper()
+
+    if not is_valid_code(company_code):
+        await update.message.reply_text("Такой код компании не найден.")
+        return
+
+    text = get_company_stats_text(company_code)
+    await update.message.reply_text(text, parse_mode="Markdown")
 
 async def export_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
@@ -1012,6 +1132,9 @@ def main():
     app.add_handler(CommandHandler("stop", stop_cmd))
     app.add_handler(CommandHandler("testsurvey", testsurvey_cmd))
     app.add_handler(CommandHandler("stats", stats_cmd))
+    app.add_handler(CommandHandler("stats_day", stats_day_cmd))
+    app.add_handler(CommandHandler("stats_week", stats_week_cmd))
+    app.add_handler(CommandHandler("stats_all", stats_all_cmd))
     app.add_handler(CommandHandler("export", export_cmd))
     app.add_handler(CallbackQueryHandler(callback_router))
 
