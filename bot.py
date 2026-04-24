@@ -87,7 +87,6 @@ def init_db():
         )
     """)
 
-    # Каждая строка = один ответ на один вопрос
     cur.execute("""
         CREATE TABLE IF NOT EXISTS survey_answers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,7 +102,6 @@ def init_db():
         )
     """)
 
-    # Состояние текущего опроса пользователя
     cur.execute("""
         CREATE TABLE IF NOT EXISTS survey_sessions (
             telegram_id INTEGER PRIMARY KEY,
@@ -218,7 +216,6 @@ def get_test_questions_for_current_week() -> list[str]:
     week_key = f"week_{week_num}"
     week_cfg = CONFIG["schedule_by_week"].get(week_key, {})
 
-    # Для теста берём "четверговый" набор, потому что он самый полный
     day_config = week_cfg.get("thursday")
     if not day_config:
         day_config = week_cfg.get("tuesday")
@@ -500,6 +497,30 @@ def get_company_stats_text(company_code: str) -> str:
 # ОТПРАВКА ВОПРОСОВ
 # ──────────────────────────────────────────────────────────────────────────────
 
+def build_keyboard_for_question(question_id: str) -> InlineKeyboardMarkup:
+    question = get_question(question_id)
+    if not question:
+        return InlineKeyboardMarkup([])
+
+    keyboard = []
+    row = []
+
+    for i, btn in enumerate(question["buttons"], start=1):
+        row.append(
+            InlineKeyboardButton(
+                btn["text"],
+                callback_data=f"{question_id}:{btn['value']}"
+            )
+        )
+        if i % 2 == 0:
+            keyboard.append(row)
+            row = []
+
+    if row:
+        keyboard.append(row)
+
+    return InlineKeyboardMarkup(keyboard)
+
 async def send_question(bot, chat_id: int, question_id: str, current_num: int, total_num: int):
     question = get_question(question_id)
     if not question:
@@ -507,30 +528,10 @@ async def send_question(bot, chat_id: int, question_id: str, current_num: int, t
 
     text = question["text"].replace("{total}", str(total_num))
 
-    keyboard = []
-row = []
-
-for i, btn in enumerate(question["buttons"], start=1):
-    row.append(
-        InlineKeyboardButton(
-            btn["text"],
-            callback_data=f"{question_id}:{btn['value']}"
-        )
-    )
-
-    # каждые 2 кнопки — новая строка
-    if i % 2 == 0:
-        keyboard.append(row)
-        row = []
-
-# если осталось нечётное количество
-if row:
-    keyboard.append(row)
-
     await bot.send_message(
         chat_id=chat_id,
         text=text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=build_keyboard_for_question(question_id),
         parse_mode="Markdown"
     )
 
@@ -558,6 +559,8 @@ async def launch_survey_for_user(bot, telegram_id: int, company_code: str, quest
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    clear_survey_session(update.effective_user.id)
+
     await update.message.reply_text(
         "Привет 👋\n\n"
         "Я бот SõmaSpace — помогаю командам следить за своим состоянием.\n\n"
@@ -605,6 +608,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/myid — показать твой Telegram ID\n"
         "/stats TEST — статистика по компании\n"
         "/export TEST — выгрузить CSV\n"
+        "/stop — остановить текущий опрос\n"
         "/help — справка",
         parse_mode="Markdown"
     )
@@ -628,6 +632,8 @@ async def testsurvey_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Сначала зарегистрируйся через /start и введи код компании."
         )
         return
+
+    clear_survey_session(user_id)
 
     question_ids = get_test_questions_for_current_week()
     greeting = get_test_greeting()
@@ -700,23 +706,26 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     session = get_survey_session(user_id)
     if not session:
-        await query.edit_message_text("Сессия опроса не найдена. Начни заново через /testsurvey.")
+        await query.edit_message_text(
+            "Эта сессия уже неактуальна. Нажми /start или /testsurvey и начни заново."
+        )
         return
 
     company_code = session["company_code"]
     question_ids = session["question_ids"]
     current_index = session["current_index"]
 
-    # Базовая проверка, чтобы не перепутать вопрос
     if current_index >= len(question_ids):
         clear_survey_session(user_id)
-        await query.edit_message_text("Сессия уже завершена.")
+        await query.edit_message_text("Опрос уже завершён. Нажми /start, чтобы начать заново.")
         return
 
     expected_question_id = question_ids[current_index]
     if question_id != expected_question_id:
-        await query.edit_message_text("Ответ не совпадает с текущим вопросом. Начни заново через /testsurvey.")
         clear_survey_session(user_id)
+        await query.edit_message_text(
+            "Похоже, это старая кнопка из предыдущего опроса. Нажми /start или /testsurvey."
+        )
         return
 
     save_single_answer(user_id, company_code, question_id, value)
@@ -735,14 +744,10 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total_num = len(question_ids)
 
     text = next_question["text"].replace("{total}", str(total_num))
-    keyboard = [
-        [InlineKeyboardButton(btn["text"], callback_data=f"{next_question_id}:{btn['value']}")]
-        for btn in next_question["buttons"]
-    ]
 
     await query.edit_message_text(
         text=text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=build_keyboard_for_question(next_question_id),
         parse_mode="Markdown"
     )
 
@@ -766,6 +771,7 @@ async def send_survey(application: Application):
 
     for telegram_id, company_code in participants:
         try:
+            clear_survey_session(telegram_id)
             await launch_survey_for_user(
                 bot=application.bot,
                 telegram_id=telegram_id,
