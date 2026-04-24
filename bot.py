@@ -621,31 +621,29 @@ async def handle_welcome_callback(update: Update, context: ContextTypes.DEFAULT_
     await query.answer()
 
     value = query.data.replace("welcome:", "")
+    chat_id = query.message.chat_id
+
+    try:
+        await query.message.delete()
+    except Exception as e:
+        logger.warning(f"Не удалось удалить welcome-сообщение: {e}")
 
     if value == "greeting_ack":
-        await send_welcome_step(context.bot, query.message.chat_id, "step_2_what_is_it")
+        await send_welcome_step(context.bot, chat_id, "step_2_what_is_it")
 
     elif value == "what_ack":
-        await send_welcome_step(context.bot, query.message.chat_id, "step_3_confidentiality")
+        await send_welcome_step(context.bot, chat_id, "step_3_confidentiality")
 
     elif value == "conf_understood":
-        await send_welcome_step(context.bot, query.message.chat_id, "step_4_no_retaliation")
+        await send_welcome_step(context.bot, chat_id, "step_4_no_retaliation")
 
     elif value == "no_retaliation_ack":
-        await send_welcome_step(context.bot, query.message.chat_id, "step_5_consent")
+        await send_welcome_step(context.bot, chat_id, "step_5_consent")
 
     elif value == "consent_yes":
         step = WELCOME["welcome_flow"]["step_6_after_consent_yes"]
         await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=render_text(step["text"]),
-            parse_mode="Markdown"
-        )
-
-    elif value == "consent_questions":
-        step = WELCOME["welcome_flow"]["step_6_after_consent_questions"]
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
+            chat_id=chat_id,
             text=render_text(step["text"]),
             parse_mode="Markdown"
         )
@@ -653,12 +651,11 @@ async def handle_welcome_callback(update: Update, context: ContextTypes.DEFAULT_
     elif value == "consent_no":
         step = WELCOME["welcome_flow"]["step_6_after_consent_no"]
         await context.bot.send_message(
-            chat_id=query.message.chat_id,
+            chat_id=chat_id,
             text=render_text(step["text"]),
             parse_mode="Markdown"
         )
-
-
+        
 async def receive_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     code = update.message.text.strip().upper()
     user_id = update.effective_user.id
