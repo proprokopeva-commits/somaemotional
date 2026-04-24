@@ -502,22 +502,13 @@ def build_keyboard_for_question(question_id: str) -> InlineKeyboardMarkup:
     if not question:
         return InlineKeyboardMarkup([])
 
-    keyboard = []
-    row = []
-
-    for i, btn in enumerate(question["buttons"], start=1):
-        row.append(
-            InlineKeyboardButton(
-                btn["text"],
-                callback_data=f"{question_id}:{btn['value']}"
-            )
-        )
-        if i % 2 == 0:
-            keyboard.append(row)
-            row = []
-
-    if row:
-        keyboard.append(row)
+    keyboard = [
+        [InlineKeyboardButton(
+            btn["text"],
+            callback_data=f"{question_id}:{btn['value']}"
+        )]
+        for btn in question["buttons"]
+    ]
 
     return InlineKeyboardMarkup(keyboard)
 
