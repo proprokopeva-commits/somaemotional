@@ -7,6 +7,7 @@ import random
 import sqlite3
 import threading
 import time
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -25,32 +26,27 @@ from telegram.ext import (
     filters,
 )
 
-# ──────────────────────────────────────────────────────────────────────────────
-# НАСТРОЙКИ
-# ──────────────────────────────────────────────────────────────────────────────
-
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 YANDEX_TOKEN = os.getenv("YANDEX_TOKEN")
 ADMIN_TELEGRAM_ID = os.getenv("ADMIN_TELEGRAM_ID")
+
+CURATOR_NAME = os.getenv("CURATOR_NAME", "Оля")
+CURATOR_USERNAME = os.getenv("CURATOR_USERNAME", "username_куратора")
 
 YANDEX_FOLDER = "/SomaSpace"
 DB_PATH = "/app/data/somaspace.db"
 
 BASE_DIR = Path(__file__).resolve().parent
 QUESTIONS_FILE = BASE_DIR / "questions.json"
+WELCOME_FILE = BASE_DIR / "bot_welcome_messages.json"
 
 WAITING_CODE = 0
-
-# ──────────────────────────────────────────────────────────────────────────────
-# КОНФИГ ВОПРОСОВ
-# ──────────────────────────────────────────────────────────────────────────────
 
 with open(QUESTIONS_FILE, encoding="utf-8") as f:
     CONFIG = json.load(f)
 
-# ──────────────────────────────────────────────────────────────────────────────
-# ЛОГИРОВАНИЕ
-# ──────────────────────────────────────────────────────────────────────────────
+with open(WELCOME_FILE, encoding="utf-8") as f:
+    WELCOME = json.load(f)
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -58,13 +54,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ──────────────────────────────────────────────────────────────────────────────
-# БАЗА ДАННЫХ
-# ──────────────────────────────────────────────────────────────────────────────
+
+def render_text(text: str) -> str:
+    return (
+        text
+        .replace("[ИМЯ КУРАТОРА]", CURATOR_NAME)
+        .replace("@[username_куратора]", f"@{CURATOR_USERNAME}")
+        .replace("[username_куратора]", CURATOR_USERNAME)
+    )
+
 
 def get_conn():
     os.makedirs("/app/data", exist_ok=True)
     return sqlite3.connect(DB_PATH)
+
 
 def init_db():
     conn = get_conn()
@@ -121,22 +124,22 @@ def init_db():
     conn.close()
     logger.info("База данных инициализирована")
 
-# ──────────────────────────────────────────────────────────────────────────────
-# БАЗОВЫЕ УТИЛИТЫ
-# ──────────────────────────────────────────────────────────────────────────────
 
 def anonymize(telegram_id: int) -> str:
     raw = str(telegram_id).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:16]
 
+
 def is_admin(user_id: int) -> bool:
     return ADMIN_TELEGRAM_ID is not None and str(user_id) == str(ADMIN_TELEGRAM_ID)
+
 
 def get_all_companies() -> list[str]:
     conn = get_conn()
     rows = conn.execute("SELECT code FROM companies ORDER BY code").fetchall()
     conn.close()
     return [row[0] for row in rows]
+
 
 def get_company_name(code: str) -> Optional[str]:
     conn = get_conn()
@@ -147,8 +150,10 @@ def get_company_name(code: str) -> Optional[str]:
     conn.close()
     return row[0] if row else None
 
+
 def is_valid_code(code: str) -> bool:
     return code.upper() in get_all_companies()
+
 
 def register_user(telegram_id: int, company_code: str) -> bool:
     anon_id = anonymize(telegram_id)
@@ -166,6 +171,7 @@ def register_user(telegram_id: int, company_code: str) -> bool:
         logger.error(f"Ошибка регистрации: {e}")
         return False
 
+
 def get_user_company(telegram_id: int) -> Optional[str]:
     conn = get_conn()
     row = conn.execute(
@@ -175,6 +181,7 @@ def get_user_company(telegram_id: int) -> Optional[str]:
     conn.close()
     return row[0] if row else None
 
+
 def get_all_participants() -> list[tuple[int, str]]:
     conn = get_conn()
     rows = conn.execute(
@@ -183,9 +190,6 @@ def get_all_participants() -> list[tuple[int, str]]:
     conn.close()
     return rows
 
-# ──────────────────────────────────────────────────────────────────────────────
-# РАБОТА С QUESTIONS.JSON
-# ──────────────────────────────────────────────────────────────────────────────
 
 def get_questions_for_date(dt: datetime) -> Optional[list[str]]:
     weekday = dt.strftime("%A").lower()
@@ -207,27 +211,29 @@ def get_questions_for_date(dt: datetime) -> Optional[list[str]]:
 
     return question_ids
 
+
 def get_test_questions_for_current_week() -> list[str]:
     dt = datetime.now()
     week_num = (dt.day - 1) // 7 + 1
+
     if week_num > 4:
         week_num = 4
 
     week_key = f"week_{week_num}"
     week_cfg = CONFIG["schedule_by_week"].get(week_key, {})
 
-    day_config = week_cfg.get("thursday")
-    if not day_config:
-        day_config = week_cfg.get("tuesday")
+    day_config = week_cfg.get("thursday") or week_cfg.get("tuesday")
 
     if not day_config:
         return ["mood", "workload", "leave_marker"]
 
     question_ids = day_config["questions"].copy()
+
     if day_config.get("add_monthly_deep"):
         question_ids.append("MONTHLY_DEEP")
 
     return question_ids
+
 
 def get_question(question_id: str) -> Optional[dict]:
     if question_id == "MONTHLY_DEEP":
@@ -241,17 +247,21 @@ def get_question(question_id: str) -> Optional[dict]:
 
     return None
 
+
 def get_greeting_for_date(dt: datetime) -> str:
     weekday = dt.strftime("%A").lower()
     if weekday == "tuesday":
         return random.choice(CONFIG["greetings"]["tuesday_morning"])
     return random.choice(CONFIG["greetings"]["thursday_afternoon"])
 
+
 def get_test_greeting() -> str:
     return "Привет 👋 Это тестовый запуск опроса.\nПройдём его сейчас."
 
+
 def get_closing() -> str:
     return random.choice(CONFIG["closings"]["after_survey"])
+
 
 def get_button_text(question_id: str, value: str) -> str:
     question = get_question(question_id)
@@ -261,11 +271,9 @@ def get_button_text(question_id: str, value: str) -> str:
     for btn in question["buttons"]:
         if btn["value"] == value:
             return btn["text"]
+
     return value
 
-# ──────────────────────────────────────────────────────────────────────────────
-# СЕССИИ ОПРОСОВ
-# ──────────────────────────────────────────────────────────────────────────────
 
 def start_survey_session(telegram_id: int, company_code: str, question_ids: list[str]):
     conn = get_conn()
@@ -280,6 +288,7 @@ def start_survey_session(telegram_id: int, company_code: str, question_ids: list
     ))
     conn.commit()
     conn.close()
+
 
 def get_survey_session(telegram_id: int) -> Optional[dict]:
     conn = get_conn()
@@ -300,6 +309,7 @@ def get_survey_session(telegram_id: int) -> Optional[dict]:
         "current_index": current_index
     }
 
+
 def update_survey_session_index(telegram_id: int, new_index: int):
     conn = get_conn()
     conn.execute("""
@@ -310,15 +320,13 @@ def update_survey_session_index(telegram_id: int, new_index: int):
     conn.commit()
     conn.close()
 
+
 def clear_survey_session(telegram_id: int):
     conn = get_conn()
     conn.execute("DELETE FROM survey_sessions WHERE telegram_id = ?", (telegram_id,))
     conn.commit()
     conn.close()
 
-# ──────────────────────────────────────────────────────────────────────────────
-# СОХРАНЕНИЕ ОТВЕТОВ
-# ──────────────────────────────────────────────────────────────────────────────
 
 def save_single_answer(telegram_id: int, company: str, question_id: str, value: str):
     question = get_question(question_id)
@@ -354,14 +362,12 @@ def save_single_answer(telegram_id: int, company: str, question_id: str, value: 
     conn.close()
     logger.info(f"Сохранён ответ: {company} / {question_id} / {value}")
 
-# ──────────────────────────────────────────────────────────────────────────────
-# ЭКСПОРТ
-# ──────────────────────────────────────────────────────────────────────────────
 
 def export_to_csv(company_code: Optional[str] = None) -> str:
     filename = f"/app/data/somaspace_answers_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 
     conn = get_conn()
+
     if company_code:
         rows = conn.execute("""
             SELECT date, time, company_code, anon_id, question_id, category, value, score, weekday
@@ -375,6 +381,7 @@ def export_to_csv(company_code: Optional[str] = None) -> str:
             FROM survey_answers
             ORDER BY date DESC, time DESC
         """).fetchall()
+
     conn.close()
 
     with open(filename, "w", newline="", encoding="utf-8-sig") as f:
@@ -386,6 +393,7 @@ def export_to_csv(company_code: Optional[str] = None) -> str:
         writer.writerows(rows)
 
     return filename
+
 
 def upload_to_yandex_disk(local_file: str):
     if not YANDEX_TOKEN:
@@ -407,14 +415,12 @@ def upload_to_yandex_disk(local_file: str):
     except Exception as e:
         logger.error(f"Ошибка загрузки на Яндекс.Диск: {e}")
 
+
 def daily_backup():
     logger.info("Начинаем ежедневный бэкап...")
     csv_file = export_to_csv()
     upload_to_yandex_disk(csv_file)
 
-# ──────────────────────────────────────────────────────────────────────────────
-# СТАТИСТИКА
-# ──────────────────────────────────────────────────────────────────────────────
 
 def format_distribution(question_id: str, rows: list[tuple[str, int]], total: int) -> str:
     if total == 0 or not rows:
@@ -425,7 +431,9 @@ def format_distribution(question_id: str, rows: list[tuple[str, int]], total: in
         pct = round(count / total * 100)
         label = get_button_text(question_id, value)
         lines.append(f"{label}: {count} ({pct}%)")
+
     return "\n".join(lines)
+
 
 def get_company_stats_text(company_code: str) -> str:
     code = company_code.upper()
@@ -467,6 +475,7 @@ def get_company_stats_text(company_code: str) -> str:
     ]
 
     conn = get_conn()
+
     for (question_id,) in distinct_questions:
         question = get_question(question_id)
         if not question:
@@ -493,27 +502,66 @@ def get_company_stats_text(company_code: str) -> str:
     conn.close()
     return "\n".join(parts).strip()
 
-# ──────────────────────────────────────────────────────────────────────────────
-# ОТПРАВКА ВОПРОСОВ
-# ──────────────────────────────────────────────────────────────────────────────
 
 def build_keyboard_for_question(question_id: str) -> InlineKeyboardMarkup:
     question = get_question(question_id)
+
     if not question:
         return InlineKeyboardMarkup([])
 
     keyboard = [
-        [InlineKeyboardButton(
-            btn["text"],
-            callback_data=f"{question_id}:{btn['value']}"
-        )]
+        [
+            InlineKeyboardButton(
+                btn["text"],
+                callback_data=f"{question_id}:{btn['value']}"
+            )
+        ]
         for btn in question["buttons"]
     ]
 
     return InlineKeyboardMarkup(keyboard)
 
+
+def build_welcome_keyboard(step_key: str) -> InlineKeyboardMarkup:
+    step = WELCOME["welcome_flow"].get(step_key, {})
+    buttons = step.get("buttons", [])
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                btn["text"],
+                callback_data=f"welcome:{btn['value']}"
+            )
+        ]
+        for btn in buttons
+    ]
+
+    return InlineKeyboardMarkup(keyboard)
+
+
+async def send_welcome_step(
+    bot,
+    chat_id: int,
+    step_key: str,
+    use_delay: bool = True
+):
+    step = WELCOME["welcome_flow"][step_key]
+
+    delay = step.get("delay_seconds", 0)
+    if use_delay and delay:
+        await asyncio.sleep(delay)
+
+    await bot.send_message(
+        chat_id=chat_id,
+        text=render_text(step["text"]),
+        reply_markup=build_welcome_keyboard(step_key),
+        parse_mode="Markdown"
+    )
+
+
 async def send_question(bot, chat_id: int, question_id: str, current_num: int, total_num: int):
     question = get_question(question_id)
+
     if not question:
         return
 
@@ -525,6 +573,7 @@ async def send_question(bot, chat_id: int, question_id: str, current_num: int, t
         reply_markup=build_keyboard_for_question(question_id),
         parse_mode="Markdown"
     )
+
 
 async def launch_survey_for_user(bot, telegram_id: int, company_code: str, question_ids: list[str], greeting: str):
     if not question_ids:
@@ -545,20 +594,62 @@ async def launch_survey_for_user(bot, telegram_id: int, company_code: str, quest
         total_num=len(question_ids)
     )
 
-# ──────────────────────────────────────────────────────────────────────────────
-# TELEGRAM HANDLERS
-# ──────────────────────────────────────────────────────────────────────────────
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     clear_survey_session(update.effective_user.id)
 
-    await update.message.reply_text(
-        "Привет 👋\n\n"
-        "Я бот SõmaSpace — помогаю командам следить за своим состоянием.\n\n"
-        "Введи *код своей компании* — его дал тебе HR.",
-        parse_mode="Markdown"
+    await send_welcome_step(
+        bot=context.bot,
+        chat_id=update.effective_chat.id,
+        step_key="step_1_greeting",
+        use_delay=False
     )
+
     return WAITING_CODE
+
+
+async def handle_welcome_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    value = query.data.replace("welcome:", "")
+
+    if value == "greeting_ack":
+        await send_welcome_step(context.bot, query.message.chat_id, "step_2_what_is_it")
+
+    elif value == "what_ack":
+        await send_welcome_step(context.bot, query.message.chat_id, "step_3_confidentiality")
+
+    elif value == "conf_understood":
+        await send_welcome_step(context.bot, query.message.chat_id, "step_4_no_retaliation")
+
+    elif value == "no_retaliation_ack":
+        await send_welcome_step(context.bot, query.message.chat_id, "step_5_consent")
+
+    elif value == "consent_yes":
+        step = WELCOME["welcome_flow"]["step_6_after_consent_yes"]
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=render_text(step["text"]),
+            parse_mode="Markdown"
+        )
+
+    elif value == "consent_questions":
+        step = WELCOME["welcome_flow"]["step_6_after_consent_questions"]
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=render_text(step["text"]),
+            parse_mode="Markdown"
+        )
+
+    elif value == "consent_no":
+        step = WELCOME["welcome_flow"]["step_6_after_consent_no"]
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=render_text(step["text"]),
+            parse_mode="Markdown"
+        )
+
 
 async def receive_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     code = update.message.text.strip().upper()
@@ -590,19 +681,33 @@ async def receive_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
     return ConversationHandler.END
 
+
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = WELCOME["contact_commands"]["help"]["text"]
+
     await update.message.reply_text(
-        "🤖 *SõmaSpace Pulse Bot*\n\n"
-        "Команды:\n"
-        "/start — регистрация по коду компании\n"
-        "/testsurvey — вручную запустить тестовый опрос для себя\n"
-        "/myid — показать твой Telegram ID\n"
-        "/stats TEST — статистика по компании\n"
-        "/export TEST — выгрузить CSV\n"
-        "/stop — остановить текущий опрос\n"
-        "/help — справка",
+        render_text(text),
         parse_mode="Markdown"
     )
+
+
+async def contact_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = WELCOME["contact_commands"]["contact"]["text"]
+
+    await update.message.reply_text(
+        render_text(text),
+        parse_mode="Markdown"
+    )
+
+
+async def privacy_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = WELCOME["contact_commands"]["privacy"]["text"]
+
+    await update.message.reply_text(
+        render_text(text),
+        parse_mode="Markdown"
+    )
+
 
 async def myid_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -610,9 +715,14 @@ async def myid_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
+
 async def stop_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     clear_survey_session(update.effective_user.id)
-    await update.message.reply_text("Опрос остановлен. Чтобы вернуться — /start")
+
+    await update.message.reply_text(
+        "Опрос остановлен. Чтобы вернуться — /start"
+    )
+
 
 async def testsurvey_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -637,6 +747,7 @@ async def testsurvey_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         greeting=greeting
     )
 
+
 async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("У тебя нет доступа к статистике.")
@@ -650,6 +761,7 @@ async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     company_code = context.args[0].strip().upper()
+
     if not is_valid_code(company_code):
         await update.message.reply_text("Такой код компании не найден.")
         return
@@ -657,17 +769,20 @@ async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = get_company_stats_text(company_code)
     await update.message.reply_text(text, parse_mode="Markdown")
 
+
 async def export_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("У тебя нет доступа к экспорту.")
         return
 
     company_code = None
+
     if context.args:
         company_code = context.args[0].strip().upper()
 
     try:
         filename = export_to_csv(company_code)
+
         caption = "Вот экспорт ответов в CSV."
         if company_code:
             caption = f"Вот экспорт ответов по компании {company_code}."
@@ -678,11 +793,13 @@ async def export_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 filename=os.path.basename(filename),
                 caption=caption
             )
+
     except Exception as e:
         logger.error(f"Ошибка отправки CSV: {e}")
         await update.message.reply_text("Не получилось отправить CSV-файл.")
 
-async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def handle_survey_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
@@ -696,6 +813,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     question_id, value = data.split(":", 1)
 
     session = get_survey_session(user_id)
+
     if not session:
         await query.edit_message_text(
             "Эта сессия уже неактуальна. Нажми /start или /testsurvey и начни заново."
@@ -712,6 +830,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     expected_question_id = question_ids[current_index]
+
     if question_id != expected_question_id:
         clear_survey_session(user_id)
         await query.edit_message_text(
@@ -742,9 +861,15 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# ──────────────────────────────────────────────────────────────────────────────
-# РАССЫЛКА ПО РАСПИСАНИЮ
-# ──────────────────────────────────────────────────────────────────────────────
+
+async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    data = update.callback_query.data
+
+    if data.startswith("welcome:"):
+        await handle_welcome_callback(update, context)
+    else:
+        await handle_survey_button(update, context)
+
 
 async def send_survey(application: Application):
     now = datetime.now()
@@ -763,6 +888,7 @@ async def send_survey(application: Application):
     for telegram_id, company_code in participants:
         try:
             clear_survey_session(telegram_id)
+
             await launch_survey_for_user(
                 bot=application.bot,
                 telegram_id=telegram_id,
@@ -770,11 +896,14 @@ async def send_survey(application: Application):
                 question_ids=question_ids,
                 greeting=greeting
             )
+
             sent += 1
+
         except Exception as e:
             logger.warning(f"Не удалось отправить {telegram_id}: {e}")
 
     logger.info(f"Рассылка завершена: отправлено {sent} из {len(participants)}")
+
 
 def run_scheduler(application: Application):
     schedule.clear()
@@ -817,9 +946,6 @@ def run_scheduler(application: Application):
             logger.error(f"Ошибка планировщика: {e}")
             time.sleep(30)
 
-# ──────────────────────────────────────────────────────────────────────────────
-# ЗАПУСК
-# ──────────────────────────────────────────────────────────────────────────────
 
 def main():
     if not BOT_TOKEN:
@@ -841,17 +967,20 @@ def main():
 
     app.add_handler(reg)
     app.add_handler(CommandHandler("help", help_cmd))
+    app.add_handler(CommandHandler("contact", contact_cmd))
+    app.add_handler(CommandHandler("privacy", privacy_cmd))
     app.add_handler(CommandHandler("myid", myid_cmd))
     app.add_handler(CommandHandler("stop", stop_cmd))
     app.add_handler(CommandHandler("testsurvey", testsurvey_cmd))
     app.add_handler(CommandHandler("stats", stats_cmd))
     app.add_handler(CommandHandler("export", export_cmd))
-    app.add_handler(CallbackQueryHandler(handle_button))
+    app.add_handler(CallbackQueryHandler(callback_router))
 
     threading.Thread(target=run_scheduler, args=(app,), daemon=True).start()
 
     logger.info("Бот запущен!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 if __name__ == "__main__":
     main()
