@@ -526,18 +526,25 @@ def build_welcome_keyboard(step_key: str) -> InlineKeyboardMarkup:
     step = WELCOME["welcome_flow"].get(step_key, {})
     buttons = step.get("buttons", [])
 
-    keyboard = [
-        [
-            InlineKeyboardButton(
-                btn["text"],
-                callback_data=f"welcome:{btn['value']}"
-            )
-        ]
-        for btn in buttons
-    ]
+    keyboard = []
+
+    for btn in buttons:
+        if "url" in btn:
+            keyboard.append([
+                InlineKeyboardButton(
+                    btn["text"],
+                    url=btn["url"]
+                )
+            ])
+        else:
+            keyboard.append([
+                InlineKeyboardButton(
+                    btn["text"],
+                    callback_data=f"welcome:{btn['value']}"
+                )
+            ])
 
     return InlineKeyboardMarkup(keyboard)
-
 
 async def send_welcome_step(
     bot,
