@@ -879,19 +879,24 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_survey_button(update, context)
 
 
-async def send_survey(application: Application):
+async def send_survey(application: Application, force: bool = False):
     now = datetime.now()
-    question_ids = get_questions_for_date(now)
+
+    if force:
+        question_ids = get_test_questions_for_current_week()
+        greeting = get_test_greeting()
+    else:
+        question_ids = get_questions_for_date(now)
+        greeting = get_greeting_for_date(now)
 
     if not question_ids:
         logger.info("Сегодня не день опроса по расписанию")
         return
 
-    greeting = get_greeting_for_date(now)
     participants = get_all_participants()
     sent = 0
 
-    logger.info(f"Старт рассылки. Вопросов: {len(question_ids)}")
+    logger.info(f"Старт рассылки. Вопросов: {len(question_ids)}. Force: {force}")
 
     for telegram_id, company_code in participants:
         try:
@@ -911,8 +916,7 @@ async def send_survey(application: Application):
             logger.warning(f"Не удалось отправить {telegram_id}: {e}")
 
     logger.info(f"Рассылка завершена: отправлено {sent} из {len(participants)}")
-
-
+    
 def run_scheduler(application: Application):
     schedule.clear()
 
@@ -966,9 +970,24 @@ async def run_cron_survey_once():
     await app.shutdown()
 
 
+async def run_cron_survey_once(force: bool = False):
+    if not BOT_TOKEN:
+        raise ValueError("Не задан BOT_TOKEN")
+
+    init_db()
+
+    app = Application.builder().token(BOT_TOKEN).build()
+    await app.initialize()
+
+    try:
+        await send_survey(app, force=force)
+    finally:
+        await app.shutdown()
+
+
 def cron_main():
-    import asyncio
-    asyncio.run(run_cron_survey_once())
+    force = "--force" in sys.argv
+    asyncio.run(run_cron_survey_once(force=force))
 
 def main():
     if not BOT_TOKEN:
@@ -1006,7 +1025,8 @@ def main():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "--send-survey":
+    if "--send-survey" in sys.argv:
         cron_main()
     else:
         main()
+        
