@@ -1,17 +1,25 @@
 {
   "_meta": {
-    "version": "1.0",
+    "version": "2.0",
     "project": "SõmaSpace Pulse Bot",
-    "description": "Конфигурация вопросов для пульс-опросов. Структура: ядро + ротация по неделям месяца.",
+    "description": "Финальная версия вопросов. Четыре ротационных вопроса про дистанцирование от работы — каждую неделю новый угол. Преамбула про анонимность — только при регистрации, плюс короткое напоминание раз в 4 опроса.",
+    "button_layout": "one_per_row",
+    "button_layout_comment": "КРИТИЧНО: клавиатура формируется как [[btn1], [btn2], [btn3]] — каждая кнопка в своей строке. Это даёт полную ширину экрана и текст не обрезается на мобильном.",
     "schedule": {
       "tuesday":  { "time": "11:00", "questions_count": 3 },
       "thursday": { "time": "15:30", "questions_count": 4 }
     },
-    "response_format": "buttons_only",
-    "updated": "2026-04-22"
+    "privacy_reminder": {
+      "frequency": "every_4th_survey",
+      "placement": "before_first_question",
+      "comment": "Короткое напоминание про анонимность перед первым вопросом — раз в 4 опроса (раз в 2 недели)"
+    },
+    "updated": "2026-04-24"
   },
 
   "greetings": {
+    "_comment": "Бот случайно выбирает одно приветствие из массива — чтобы не было однообразия",
+
     "tuesday_morning": [
       "Привет 👋 Это короткий вторничный пульс.\nТри вопроса — меньше минуты.",
       "Доброе утро 🌿 Пара минут на пульс?\nТри коротких вопроса.",
@@ -24,6 +32,11 @@
     ]
   },
 
+  "privacy_reminder_text": {
+    "_comment": "Показывается перед первым вопросом раз в 4 опроса. Одна короткая строка — не преамбула.",
+    "text": "🌿 Напомню: твои ответы анонимны. Компания видит только общую картину команды — не тебя лично."
+  },
+
   "closings": {
     "after_survey": [
       "Спасибо, записала 🙏\nДо следующего раза.",
@@ -34,18 +47,18 @@
   },
 
   "core_questions": {
-    "_comment": "Эти три вопроса задаются каждый опрос — и во вторник, и в четверг. Это основа трендов.",
+    "_comment": "Два вопроса задаются каждый опрос — во вторник и четверг. Это основа трендов.",
 
     "mood": {
       "id": "mood",
       "text": "*Вопрос 1 из {total}*\n\nКак ты сегодня?",
       "category": "Настроение",
       "buttons": [
-        { "text": "🔥 В ресурсе",     "value": "resource",   "score": 5 },
-        { "text": "🙂 Нормально",      "value": "normal",     "score": 4 },
-        { "text": "😐 Так себе",       "value": "so_so",      "score": 3 },
-        { "text": "🌧 Устал(а)",       "value": "tired",      "score": 2 },
-        { "text": "💤 На пределе",     "value": "exhausted",  "score": 1 }
+        { "text": "🔥 В ресурсе",    "value": "resource",   "score": 5 },
+        { "text": "🙂 Нормально",     "value": "normal",     "score": 4 },
+        { "text": "😐 Так себе",      "value": "so_so",      "score": 3 },
+        { "text": "🌧 Устал(а)",      "value": "tired",      "score": 2 },
+        { "text": "💤 На пределе",    "value": "exhausted",  "score": 1 }
       ]
     },
 
@@ -54,29 +67,73 @@
       "text": "*Вопрос 2 из {total}*\n\nКак тебе сейчас по нагрузке?",
       "category": "Нагрузка",
       "buttons": [
-        { "text": "🌿 Легко, есть запас",         "value": "light",        "score": 5 },
-        { "text": "⚖️ Нормальный ритм",            "value": "balanced",     "score": 4 },
-        { "text": "🏃 Интенсивно, но тяну",        "value": "intense",      "score": 3 },
-        { "text": "🔥 Высокая, уже на пределе",   "value": "overload",     "score": 2 },
-        { "text": "🆘 Не справляюсь",              "value": "cant_cope",    "score": 1 }
-      ]
-    },
-
-    "leave_marker": {
-      "id": "leave_marker",
-      "text": "*Вопрос 3 из {total}*\n\nНа этой неделе было ощущение «хочу всё бросить»?",
-      "category": "Риск ухода",
-      "buttons": [
-        { "text": "😌 Нет, всё ок",                 "value": "no",          "score": 5 },
-        { "text": "🤔 Мелькнуло один раз",          "value": "once",        "score": 3 },
-        { "text": "😔 Да, было несколько раз",      "value": "few_times",   "score": 2 },
-        { "text": "🚪 Почти постоянно",              "value": "constant",    "score": 1 }
+        { "text": "🌿 Легко, есть запас",         "value": "light",      "score": 5 },
+        { "text": "⚖️ Нормальный ритм",            "value": "balanced",   "score": 4 },
+        { "text": "🏃 Интенсивно, но тяну",        "value": "intense",    "score": 3 },
+        { "text": "🔥 Высокая, уже на пределе",   "value": "overload",   "score": 2 },
+        { "text": "🆘 Не справляюсь",              "value": "cant_cope",  "score": 1 }
       ]
     }
   },
 
-  "rotation_questions": {
-    "_comment": "Эти вопросы задаются только в четверг. Один вопрос на неделю — ротация по 4 темам.",
+  "distancing_rotation": {
+    "_comment": "Вопрос 3 — про дистанцирование от работы. Ротация 4 углов по неделям месяца. Каждый вторник и четверг — новая формулировка, но одно и то же по сути. Это снимает эффект привыкания и даёт объёмную картину.",
+
+    "week_1_action": {
+      "id": "distancing_action",
+      "text": "*Вопрос 3 из {total}*\n\nНа этой неделе хотелось приходить на работу?",
+      "category": "Дистанцирование · действие",
+      "angle": "Желание действовать, физически быть на работе",
+      "buttons": [
+        { "text": "🌱 Да, с интересом",     "value": "with_interest",  "score": 5 },
+        { "text": "🙂 Обычно, без особого", "value": "routine",        "score": 4 },
+        { "text": "😕 Через силу",           "value": "through_force",  "score": 2 },
+        { "text": "🌑 Совсем не хотелось",   "value": "no_desire",      "score": 1 }
+      ]
+    },
+
+    "week_2_involvement": {
+      "id": "distancing_involvement",
+      "text": "*Вопрос 3 из {total}*\n\nНасколько ты сейчас «в работе» — включён(а), вовлечён(а)?",
+      "category": "Дистанцирование · включённость",
+      "angle": "Вовлечённость в процесс, психологическое присутствие",
+      "buttons": [
+        { "text": "🎯 Полностью в деле",                 "value": "fully_in",        "score": 5 },
+        { "text": "🙂 В целом да, иногда отвлекаюсь",   "value": "mostly_in",       "score": 4 },
+        { "text": "😐 Делаю механически",                "value": "mechanical",      "score": 2 },
+        { "text": "🪫 Присутствую, но меня как будто нет", "value": "absent",        "score": 1 }
+      ]
+    },
+
+    "week_3_belonging": {
+      "id": "distancing_belonging",
+      "text": "*Вопрос 3 из {total}*\n\nКак тебе сейчас в этой работе?",
+      "category": "Дистанцирование · принадлежность",
+      "angle": "Чувство «моё место — здесь», отношение к текущему месту",
+      "buttons": [
+        { "text": "✨ Мне здесь хорошо",              "value": "good_here",     "score": 5 },
+        { "text": "🙂 В целом нормально",             "value": "okay_here",     "score": 4 },
+        { "text": "😐 По-разному, бывает тяжело",    "value": "mixed",         "score": 3 },
+        { "text": "🚪 Думаю, что пора что-то менять", "value": "time_to_change", "score": 1 }
+      ]
+    },
+
+    "week_4_future": {
+      "id": "distancing_future",
+      "text": "*Вопрос 3 из {total}*\n\nКогда ты думаешь о ближайших месяцах — ты представляешь себя в этой работе?",
+      "category": "Дистанцирование · будущее",
+      "angle": "Проекция себя в будущем компании, намерение оставаться",
+      "buttons": [
+        { "text": "🌳 Да, вижу себя здесь",    "value": "see_myself_here", "score": 5 },
+        { "text": "🙂 Скорее да, чем нет",     "value": "rather_yes",      "score": 4 },
+        { "text": "🤔 Не уверен(а)",            "value": "not_sure",        "score": 2 },
+        { "text": "🍃 Скорее уже нет",          "value": "rather_no",       "score": 1 }
+      ]
+    }
+  },
+
+  "weekly_rotation_questions": {
+    "_comment": "Четвёртый вопрос — только в четверг. Ротация по 4 темам в течение месяца.",
 
     "team_relations": {
       "id": "team_relations",
@@ -95,10 +152,10 @@
       "text": "*Вопрос 4 из 4*\n\nЧувствуешь ли поддержку от своего руководителя на этой неделе?",
       "category": "Отношения с руководством",
       "buttons": [
-        { "text": "💪 Есть на кого опереться",      "value": "supported",    "score": 5 },
-        { "text": "🙂 В целом нормально",           "value": "okay",         "score": 4 },
-        { "text": "😐 Не особо, но без конфликта",  "value": "neutral",      "score": 2 },
-        { "text": "🥶 Чувствую дистанцию/давление", "value": "pressure",     "score": 1 }
+        { "text": "💪 Есть на кого опереться",          "value": "supported", "score": 5 },
+        { "text": "🙂 В целом нормально",               "value": "okay",      "score": 4 },
+        { "text": "😐 Не особо, но без конфликта",      "value": "neutral",   "score": 2 },
+        { "text": "🥶 Чувствую дистанцию или давление", "value": "pressure",  "score": 1 }
       ]
     },
 
@@ -107,10 +164,10 @@
       "text": "*Вопрос 4 из 4*\n\nБыло ли на этой неделе ощущение «это стоило того»?",
       "category": "Смысл работы",
       "buttons": [
-        { "text": "✨ Да, работа наполняет",         "value": "fulfilled",    "score": 5 },
-        { "text": "🙂 Иногда было",                  "value": "sometimes",    "score": 4 },
-        { "text": "😐 Делал(а) потому что надо",    "value": "obligation",   "score": 2 },
-        { "text": "🪫 Не чувствовал(а) смысла",     "value": "empty",        "score": 1 }
+        { "text": "✨ Да, работа наполняет",        "value": "fulfilled",  "score": 5 },
+        { "text": "🙂 Иногда было",                  "value": "sometimes",  "score": 4 },
+        { "text": "😐 Делал(а) потому что надо",    "value": "obligation", "score": 2 },
+        { "text": "🪫 Не чувствовал(а) смысла",     "value": "empty",      "score": 1 }
       ]
     },
 
@@ -119,133 +176,107 @@
       "text": "*Вопрос 4 из 4*\n\nЕсли бы тебе сейчас было трудно — есть ли в компании кто-то, к кому ты мог(ла) бы обратиться?",
       "category": "Поддержка и безопасность",
       "buttons": [
-        { "text": "🫂 Да, точно знаю к кому",        "value": "have_support", "score": 5 },
-        { "text": "🤔 Наверное есть",                "value": "maybe",        "score": 3 },
-        { "text": "😐 Не уверен(а)",                  "value": "unsure",       "score": 2 },
-        { "text": "🚫 Нет, таких людей нет",         "value": "alone",        "score": 1 }
+        { "text": "🫂 Да, точно знаю к кому",    "value": "have_support", "score": 5 },
+        { "text": "🤔 Наверное есть",            "value": "maybe",        "score": 3 },
+        { "text": "😐 Не уверен(а)",              "value": "unsure",       "score": 2 },
+        { "text": "🚫 Нет, таких людей нет",     "value": "alone",        "score": 1 }
       ]
     }
   },
 
   "monthly_deep_question": {
-    "_comment": "Задаётся один раз в конце месяца — в четверг 4-й недели. После всех остальных вопросов.",
+    "_comment": "Задаётся один раз в конце месяца — четверг 4-й недели, после всех остальных вопросов",
 
     "id": "monthly_change",
     "text": "*Последний вопрос месяца*\n\nЕсли бы ты мог(ла) поменять одну вещь в работе — что бы это было?",
     "category": "Приоритет изменений",
     "buttons": [
-      { "text": "⏰ Нагрузку",                        "value": "workload_change" },
-      { "text": "👥 Отношения в команде",             "value": "team_change" },
-      { "text": "👤 Отношения с руководством",        "value": "manager_change" },
-      { "text": "💰 Зарплату или условия",            "value": "compensation_change" },
-      { "text": "🎯 Смысл и интересность задач",      "value": "meaning_change" },
-      { "text": "🏠 Баланс работы и жизни",           "value": "balance_change" },
-      { "text": "✅ Ничего, всё устраивает",           "value": "nothing_change" }
+      { "text": "⏰ Нагрузку",                    "value": "workload_change" },
+      { "text": "👥 Отношения в команде",         "value": "team_change" },
+      { "text": "👤 Отношения с руководством",    "value": "manager_change" },
+      { "text": "💰 Зарплату или условия",        "value": "compensation_change" },
+      { "text": "🎯 Смысл и интересность задач",  "value": "meaning_change" },
+      { "text": "🏠 Баланс работы и жизни",       "value": "balance_change" },
+      { "text": "✅ Ничего, всё устраивает",       "value": "nothing_change" }
     ]
   },
 
   "schedule_by_week": {
-    "_comment": "Какие вопросы задаются на какой неделе месяца. Номер недели определяется по дате (неделя 1-4 текущего месяца).",
+    "_comment": "Расписание ротации. В каждой неделе свой угол вопроса про дистанцирование + своя тема для четверга.",
 
     "week_1": {
-      "tuesday":  { "questions": ["mood", "workload", "leave_marker"] },
-      "thursday": { "questions": ["mood", "workload", "leave_marker", "team_relations"] }
+      "tuesday": {
+        "questions": ["mood", "workload", "distancing_action"]
+      },
+      "thursday": {
+        "questions": ["mood", "workload", "distancing_action", "team_relations"]
+      }
     },
     "week_2": {
-      "tuesday":  { "questions": ["mood", "workload", "leave_marker"] },
-      "thursday": { "questions": ["mood", "workload", "leave_marker", "manager_relations"] }
+      "tuesday": {
+        "questions": ["mood", "workload", "distancing_involvement"]
+      },
+      "thursday": {
+        "questions": ["mood", "workload", "distancing_involvement", "manager_relations"]
+      }
     },
     "week_3": {
-      "tuesday":  { "questions": ["mood", "workload", "leave_marker"] },
-      "thursday": { "questions": ["mood", "workload", "leave_marker", "meaning"] }
+      "tuesday": {
+        "questions": ["mood", "workload", "distancing_belonging"]
+      },
+      "thursday": {
+        "questions": ["mood", "workload", "distancing_belonging", "meaning"]
+      }
     },
     "week_4": {
-      "tuesday":  { "questions": ["mood", "workload", "leave_marker"] },
+      "tuesday": {
+        "questions": ["mood", "workload", "distancing_future"]
+      },
       "thursday": {
-        "questions": ["mood", "workload", "leave_marker", "safety"],
+        "questions": ["mood", "workload", "distancing_future", "safety"],
         "add_monthly_deep": true
       }
     }
   },
 
   "alerts": {
-    "_comment": "Пороги для автоматических оповещений. Когда показатели по компании достигают тревожных значений — SõmaSpace получает уведомление и связывается с клиентом.",
+    "_comment": "Пороги для автоматических уведомлений куратору SõmaSpace. Срабатывают при агрегации данных за неделю.",
 
     "critical_workload": {
-      "description": "25% и больше людей на уровне 'не справляюсь' или 'на пределе'",
+      "description": "≥25% сотрудников на уровне «не справляюсь» или «на пределе»",
       "questions": ["workload"],
       "threshold_scores": [1, 2],
       "threshold_percent": 25
     },
-    "leave_risk": {
-      "description": "15% и больше людей с ответами 'несколько раз' или 'постоянно'",
-      "questions": ["leave_marker"],
+    "distancing_risk": {
+      "description": "≥15% сотрудников с тревожными ответами по дистанцированию (любой из 4 углов)",
+      "questions": [
+        "distancing_action",
+        "distancing_involvement",
+        "distancing_belonging",
+        "distancing_future"
+      ],
       "threshold_scores": [1, 2],
       "threshold_percent": 15
     },
     "manager_tension": {
-      "description": "20% и больше чувствуют давление или дистанцию от руководства",
+      "description": "≥20% сотрудников чувствуют давление или дистанцию с руководством",
       "questions": ["manager_relations"],
       "threshold_scores": [1, 2],
       "threshold_percent": 20
     },
     "isolation": {
-      "description": "25% и больше не видят к кому обратиться за поддержкой",
+      "description": "≥25% сотрудников не видят к кому обратиться за поддержкой",
       "questions": ["safety"],
       "threshold_scores": [1, 2],
       "threshold_percent": 25
+    },
+    "combined_risk": {
+      "description": "≥10% сотрудников показывают низкий score по обоим параметрам одновременно — нагрузка И дистанцирование",
+      "questions": ["workload", "distancing_*"],
+      "logic": "AND",
+      "threshold_scores": [1, 2],
+      "threshold_percent": 10
     }
-  },
-
-  "report_template": {
-    "_comment": "Структура месячного отчёта для собственника. Все данные агрегированные, без имён.",
-
-    "sections": [
-      {
-        "title": "Эмоциональный пульс за месяц",
-        "metrics": [
-          "Средняя оценка настроения по шкале 1-5",
-          "% людей в зелёной зоне (4-5)",
-          "% в жёлтой зоне (3)",
-          "% в красной зоне (1-2)",
-          "Динамика по неделям (график)"
-        ]
-      },
-      {
-        "title": "Нагрузка команды",
-        "metrics": [
-          "% людей на пределе или не справляющихся",
-          "Дни недели с пиком нагрузки",
-          "Сравнение вторник vs четверг (накопление усталости)"
-        ]
-      },
-      {
-        "title": "Риск ухода",
-        "metrics": [
-          "% людей с тревожными маркерами",
-          "Динамика за месяц",
-          "Корреляция с нагрузкой"
-        ]
-      },
-      {
-        "title": "Срезы по темам",
-        "metrics": [
-          "Неделя 1: отношения в команде",
-          "Неделя 2: отношения с руководством",
-          "Неделя 3: смысл работы",
-          "Неделя 4: поддержка и безопасность"
-        ]
-      },
-      {
-        "title": "Топ-3 приоритета изменений",
-        "source": "monthly_deep_question",
-        "format": "ранжированный список с процентами"
-      },
-      {
-        "title": "Рекомендации SõmaSpace",
-        "type": "expert_commentary",
-        "description": "На основе данных — какие форматы Программы подойдут этой команде"
-      }
-    ]
   }
 }
