@@ -1,3 +1,4 @@
+import sys
 import csv
 import hashlib
 import json
@@ -953,6 +954,21 @@ def run_scheduler(application: Application):
             logger.error(f"Ошибка планировщика: {e}")
             time.sleep(30)
 
+async def run_cron_survey_once():
+    if not BOT_TOKEN:
+        raise ValueError("Не задан BOT_TOKEN")
+
+    init_db()
+
+    app = Application.builder().token(BOT_TOKEN).build()
+    await app.initialize()
+    await send_survey(app)
+    await app.shutdown()
+
+
+def cron_main():
+    import asyncio
+    asyncio.run(run_cron_survey_once())
 
 def main():
     if not BOT_TOKEN:
@@ -990,4 +1006,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--send-survey":
+        cron_main()
+    else:
+        main()
